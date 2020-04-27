@@ -11,10 +11,9 @@
 #define MAXY 40
 
 #define ANG0 0
-#define ANG90 16384
-#define ANG180 32687
-#define ANG270 49152
-#define ANG360 0
+#define ANG90 1
+#define ANG180 2
+#define ANG270 3
 
 class Map
 {
@@ -77,39 +76,43 @@ private:
     uint8_t data[MAXX*MAXY] = {0};
 };
 
-uint16_t toMyAngle(uint16_t degs)
-{
-    switch(degs)
-    {
-        case 0:        return ANG0;
-        case 90:       return ANG90;
-        case 180:      return ANG180;
-        case 270:      return ANG270;
-        case 360:      return ANG360;
-        default:       return degs * 182;
-    }
-}
-
-uint16_t fromMyAngle(uint16_t ang)
-{
-    switch(ang)
-    {
-        case ANG0:     return 0;
-        case ANG90:    return 90;
-        case ANG180:   return 180;
-        case ANG270:   return 270;
-        default:       return ang / 182;
-    }
-}
-
 class Player
 {
 public:
+    Player(uint8_t ax, uint8_t ay, uint8_t aang, Map * am)
+    {
+        x = ax;
+        lastx = ax;
+        y = ay;
+        lasty = ay;
+        angle = aang & 3;
+        m = am;
+    }
+  
+    void print()
+    {
+        Serial.println("PLAYER: ");
+        Serial.print("X\t");
+        Serial.println(x);
+        Serial.print("Y\t");
+        Serial.println(y);
+        Serial.print("A\t");
+        Serial.println(angle);
+    }
+
     void tftPrint()
     {
+        EsploraTFT.stroke(0,0,0);
+        EsploraTFT.fill(0,0,0);
+        EsploraTFT.rect(lasty<<2,lastx<<2,4,4);
+      
         EsploraTFT.stroke(255,0,0);
         EsploraTFT.fill(255,0,0);
         EsploraTFT.rect(y<<2,x<<2,4,4);
+
+        lastx = x;
+        lasty = y;
+
         //EsploraTFT.fill(0,0,255);
         /*
         switch(angle)
@@ -127,46 +130,114 @@ public:
         uint16_t absangle = angle + ang;
     }
 
-    inline void right(uint16_t degs)
+    inline void right()
     {
-        angle += toMyAngle(degs);
+        angle = (angle + 1) & 3;
     }
 
-    inline void left(uint16_t degs)
+    inline void left()
     {
-        angle -= toMyAngle(degs);
+         angle = (angle - 1) & 3;
     }
 
-    inline void forward()
+    inline bool forward()
     {
+        uint8_t newx = x;
+        uint8_t newy = y;
         switch(angle)
         {
-            case ANG0: x--;
-            case ANG90: y++;
-            case ANG180: x++;
-            case ANG270: y--;
-            default: Serial.println("Bad angle");
+            case ANG0:    newx = x-1; break;
+            case ANG90:   newy = y+1; break;
+            case ANG180:  newx = x+1; break;
+            case ANG270:  newy = y-1; break;
+            default: Serial.println("Forwards bad angle");
         }
+        if(newx >= MAXX || newy >= MAXY)
+            return false;
+
+        if(m->at(newx,newy))
+          return false;
+
+        x = newx;
+        y = newy;
+        return true;
     }
     
-    inline void backward()
+    inline bool backward()
     {
+        uint8_t newx = x;
+        uint8_t newy = y;
         switch(angle)
         {
-            case ANG0: x++;
-            case ANG90: y--;
-            case ANG180: x--;
-            case ANG270: y++;
-            default: Serial.println("Bad angle");
+            case ANG0:    newx = x-1; break;
+            case ANG90:   newy = y-1; break;
+            case ANG180:  newx = x-1; break;
+            case ANG270:  newy = y+1; break;
+            default: Serial.println("Forwards bad angle");
         }
-    }
+        if(newx >= MAXX || newy >= MAXY)
+            return false;
 
+        if(m->at(newx,newy))
+          return false;
+
+        x = newx;
+        y = newy;
+        return true;
+
+        
+    }
+    uint8_t lastx = 0, lasty = 0;
+    
     uint8_t x = 0, y = 0;
-    uint16_t angle = 0;
+    uint8_t angle = 0;
+    Map * m;
 };
 
-Player p;
+
+constexpr uint16_t button_conf_thr = 20;
+uint16_t button_conf[4] = {0};
+void sample_buttons()
+{
+    for( int i = 1; i < 5; ++i )
+    {
+        if(Esplora.readButton(i) == LOW)
+        {
+            if(button_conf[i-1] < button_conf_thr)
+              button_conf[i-1]++;
+        }
+        else
+        {
+            button_conf[i-1]=0;
+        }
+    }
+}
+
+int button_press()
+{
+    static bool last[4] = {false};
+    
+    int r = 0;
+    for( int i = 1; i < 5; ++i )
+    {
+        bool button = button_conf[i-1] >= button_conf_thr;
+        if(button && !last[i-1])
+        {
+            r = i;
+            last[i-1] = button;
+            break;
+        }
+        last[i-1] = button;
+    }
+    return r;
+}
+
+
+
+
+
 Map m;
+Player p(10,10,0, &m);
 void setup() 
 {
     Serial.begin(115200);
@@ -174,16 +245,47 @@ void setup()
     randomSeed(analogRead(0));
     EsploraTFT.background(0,0,0);
     m.clear();
+    m.randomize(20);
     m.tftPrint();
-    p.x = 10;
-    p.y = 10;
     p.tftPrint();
 }
 
 void loop()
 {
-    Serial.println("kek");
-    p.tftPrint();
-    p.forward();
-    delay(1000);
+    sample_buttons();
+    switch(button_press())
+    {
+        case 0:
+          /*Serial.println("-----");
+          for(int i = 0; i < 4; ++i)
+            Serial.println(button_conf[i]);
+          Serial.println("-----");*/
+          break;
+        case SWITCH_UP:
+          Serial.println("UP");
+          p.forward();
+          p.print();
+          p.tftPrint();
+          break;
+        case SWITCH_DOWN:
+          Serial.println("DOWN");
+          p.backward();
+          p.print();
+          p.tftPrint();
+          break;
+        case SWITCH_LEFT:
+          Serial.println("LEFT");
+          p.left();
+          p.print();
+          p.tftPrint();
+          break;
+        case SWITCH_RIGHT:
+          Serial.println("RIGHT");
+          p.right();
+          p.print();
+          p.tftPrint();
+          break;
+        default:
+          Serial.println("Bordel");
+    }
 }
