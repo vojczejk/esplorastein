@@ -5,8 +5,17 @@
 // X IS FOR LINES
 // Y IS FOR COLUMNSi
 // 0 0 IS TOP LEFT
+//Aangles represented as 16bit int
+
 #define MAXX 32
 #define MAXY 40
+
+#define ANG0 0
+#define ANG90 16384
+#define ANG180 32687
+#define ANG270 49152
+#define ANG360 0
+
 class Map
 {
 public:
@@ -68,6 +77,31 @@ private:
     uint8_t data[MAXX*MAXY] = {0};
 };
 
+uint16_t toMyAngle(uint16_t degs)
+{
+    switch(degs)
+    {
+        case 0:        return ANG0;
+        case 90:       return ANG90;
+        case 180:      return ANG180;
+        case 270:      return ANG270;
+        case 360:      return ANG360;
+        default:       return degs * 182;
+    }
+}
+
+uint16_t fromMyAngle(uint16_t ang)
+{
+    switch(ang)
+    {
+        case ANG0:     return 0;
+        case ANG90:    return 90;
+        case ANG180:   return 180;
+        case ANG270:   return 270;
+        default:       return ang / 182;
+    }
+}
+
 class Player
 {
 public:
@@ -88,12 +122,45 @@ public:
         EsploraTFT.rect(y<<2,x<<2,4,4);*/
     }
 
-    void ray(uint16_t angle)
+    void ray(uint16_t ang)
     {
-      
+        uint16_t absangle = angle + ang;
     }
 
-private:
+    inline void right(uint16_t degs)
+    {
+        angle += toMyAngle(degs);
+    }
+
+    inline void left(uint16_t degs)
+    {
+        angle -= toMyAngle(degs);
+    }
+
+    inline void forward()
+    {
+        switch(angle)
+        {
+            case ANG0: x--;
+            case ANG90: y++;
+            case ANG180: x++;
+            case ANG270: y--;
+            default: Serial.println("Bad angle");
+        }
+    }
+    
+    inline void backward()
+    {
+        switch(angle)
+        {
+            case ANG0: x++;
+            case ANG90: y--;
+            case ANG180: x--;
+            case ANG270: y++;
+            default: Serial.println("Bad angle");
+        }
+    }
+
     uint8_t x = 0, y = 0;
     uint16_t angle = 0;
 };
@@ -106,17 +173,17 @@ void setup()
     EsploraTFT.begin();
     randomSeed(analogRead(0));
     EsploraTFT.background(0,0,0);
-    m.randomize(50);
-    m.tftPrint();
-    delay(1000);
     m.clear();
     m.tftPrint();
-    delay(1000);
-    m.randomize(50);
-    m.tftPrint();
+    p.x = 10;
+    p.y = 10;
     p.tftPrint();
 }
 
 void loop()
 {
+    Serial.println("kek");
+    p.tftPrint();
+    p.forward();
+    delay(1000);
 }
