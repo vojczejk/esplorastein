@@ -9,6 +9,8 @@
 
 #define MAXX 32
 #define MAXY 40
+#define SCALE 4
+#define SCALESHIFT 2
 
 #define ANG0 0
 #define ANG90 1
@@ -65,7 +67,6 @@ public:
             for(uint8_t y = 0; y < MAXY; ++y)
             {
                 uint8_t val = at(x,y);
-                Serial.println(val);
                 val = (val != 0 ? 255 : 0);
                 EsploraTFT.stroke(val,val,val);
                 EsploraTFT.rect(y<<2,x<<2,4,4);
@@ -125,9 +126,90 @@ public:
         EsploraTFT.rect(y<<2,x<<2,4,4);*/
     }
 
-    void ray(uint16_t ang)
+    uint8_t ray(uint8_t stepping, bool left)
     {
-        uint16_t absangle = angle + ang;
+        uint8_t lx, ly, cnt;
+        uint8_t distance = 0;
+        lx = (x << SCALESHIFT) + 2;
+        ly = (y << SCALESHIFT) + 2;
+        cnt = 0;
+        EsploraTFT.stroke(0,0,255);
+        while(true)
+        {
+            EsploraTFT.point(ly,lx);
+            if(lx > (MAXX*SCALE))
+            {
+                Serial.println("LX");
+                return distance;
+            }
+            if(ly > (MAXY*SCALE))
+            {
+                Serial.println("LY");
+                return distance;
+            }
+            if(m->at(lx >> SCALESHIFT, ly >> SCALESHIFT) != 0)
+            {
+                Serial.println("COLLISION");
+                return distance;
+            }
+
+            if(cnt >= stepping)
+            {
+                Serial.println(cnt);
+                switch(angle)
+                {
+                    case 0:
+                        if(left)
+                            --ly;
+                        else
+                            ++ly;
+                        break;
+                    case 1:
+                        if(left)
+                            --lx;
+                        else
+                            ++lx;
+                        break;
+                    case 2:
+                        if(left)
+                            ++ly;
+                        else
+                            --ly;
+                        break;
+                    case 3:
+                        if(left)
+                            ++lx;
+                        else
+                            --lx;
+                        break;
+                    default:
+                        Serial.println("raybadangle");
+                }
+                cnt = 255;
+            }
+            else
+            {
+                switch(angle)
+                {
+                    case 0:
+                        --lx;
+                        break;
+                    case 1:
+                        ++ly;
+                        break;
+                    case 2:
+                        ++lx;
+                        break;
+                    case 3:
+                        --ly;
+                        break;
+                    default:
+                        Serial.println("raybadangle");
+                }
+            }
+            ++cnt;
+            ++distance;
+        }
     }
 
     inline void right()
@@ -169,7 +251,7 @@ public:
         uint8_t newy = y;
         switch(angle)
         {
-            case ANG0:    newx = x-1; break;
+            case ANG0:    newx = x+1; break;
             case ANG90:   newy = y-1; break;
             case ANG180:  newx = x-1; break;
             case ANG270:  newy = y+1; break;
@@ -232,6 +314,64 @@ int button_press()
     return r;
 }
 
+void cls()
+{
+    Serial.write(27);       // ESC command
+    Serial.print("[2J");    // clear screen command
+    Serial.write(27);
+    Serial.print("[H");     // cursor to home command
+}
+
+void gameprint(Map * m, Player * p)
+{
+    cls();
+    for(uint8_t i = 0; i < MAXY+2; ++i)
+    {
+        if(i == 0 || i == MAXY+2-1)
+            Serial.print('O');
+        else
+            Serial.print('-');
+    }
+    Serial.println();
+    for(uint8_t x = 0; x < MAXX; ++x)
+    {
+        Serial.print('|');
+        for(uint8_t y = 0; y < MAXY; ++y)
+        {
+            uint8_t val = m->at(x,y);
+            if(val)
+                Serial.print('@');
+            else if(p->x == x && p->y == y)
+            switch(p->angle)
+            {
+                case 0:
+                    Serial.print('A');
+                    break;
+                case 1:
+                    Serial.print('>');
+                    break;
+                case 2:
+                    Serial.print('V');
+                    break;
+                case 3:
+                    Serial.print('<');
+                    break;
+            }
+            else
+                Serial.print(' ');
+        }
+        Serial.print('|');
+        Serial.println();
+    }
+    for(uint8_t i = 0; i < MAXY+2; ++i)
+    {
+        if(i == 0 || i == MAXY+2-1)
+            Serial.print('O');
+        else
+            Serial.print('-');
+    }
+    Serial.println();
+}
 
 
 
@@ -262,27 +402,34 @@ void loop()
           Serial.println("-----");*/
           break;
         case SWITCH_UP:
-          Serial.println("UP");
+          //Serial.println("UP");
           p.forward();
-          p.print();
+          gameprint(&m,&p);
           p.tftPrint();
           break;
         case SWITCH_DOWN:
-          Serial.println("DOWN");
+          //Serial.println("DOWN");
           p.backward();
-          p.print();
+          gameprint(&m,&p);
           p.tftPrint();
+          p.ray(255,false);
+          p.ray(1,false);
+          p.ray(2,false);
+          p.ray(3,false);
+          p.ray(1,true);
+          p.ray(2,true);
+          p.ray(3,true);
           break;
         case SWITCH_LEFT:
-          Serial.println("LEFT");
+          //Serial.println("LEFT");
           p.left();
-          p.print();
+          gameprint(&m,&p);
           p.tftPrint();
           break;
         case SWITCH_RIGHT:
-          Serial.println("RIGHT");
+          //Serial.println("RIGHT");
           p.right();
-          p.print();
+          gameprint(&m,&p);
           p.tftPrint();
           break;
         default:
